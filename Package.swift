@@ -8,6 +8,5 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/drewag/Swiftlier.git", from: "4.0.0"),
         .package(url: "https://github.com/drewag/command-line-parser.git", from: "2.0.0"),
-        .package(url: "https://github.com/drewag/swift-serve-kitura.git", from: "11.0.0"),
     ]
 )
