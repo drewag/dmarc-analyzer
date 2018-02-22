@@ -4,14 +4,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "dmarc-analyzer",
+    name: "DMARCAnalyzer",
     products: [
         .library(
             name: "DMARCAnalyzer",
-            targets: ["Swiftlier","CommandLineParser"]),
+            targets: ["DMARCAnalyzer"]),
     ],
     dependencies: [
         .package(url: "https://github.com/drewag/Swiftlier.git", from: "4.0.0"),
         .package(url: "https://github.com/drewag/command-line-parser.git", from: "2.0.0"),
+    ],
+    targets: [
+        .target(
+            name: "DMARCAnalyzer",
+            dependencies: ["Swiftlier","CommandLineParser"]),
     ]
 )
