@@ -8,7 +8,7 @@ let package = Package(
     products: [
         .library(
             name: "DMARCAnalyzer",
-            targets: ["Swiftlier","CommandLineParser"]),
+            targets: ["DMARCAnalyzer"]),
     ],
     dependencies: [
         .package(url: "https://github.com/drewag/Swiftlier.git", from: "4.0.0"),
