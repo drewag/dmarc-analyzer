@@ -135,7 +135,7 @@ fileprivate extension XML {
         let passedDKIM: Bool
         let passedSPF: Bool
     }
-    
+
     func parseDMARC() throws -> (orgName: String, records: [DMARCRecord]) {
         guard let feedback = self["feedback"] else {
             throw self.error("parsing DMARC", because: "no feedback element was found in the xml")
@@ -161,7 +161,10 @@ fileprivate extension XML {
 
 private extension Message.Attachment {
     func xmlData() throws -> Data? {
-        if self.name.hasSuffix(".zip") {
+        if self.name.contains(".gz") {
+            return try GzipArchive.unarchive(archive: self.data)
+        }
+        else if self.name.contains(".zip") {
             guard let xmlEntry = (try? ZipContainer.open(container: self.data).first(where: {$0.info.name.hasSuffix(".xml")})) ?? nil else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "no xml found in zip")
             }
@@ -169,9 +172,6 @@ private extension Message.Attachment {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "problem unzipping xml")
             }
             return xmlData
-        }
-        else if self.name.hasSuffix(".gz") {
-            return try GzipArchive.unarchive(archive: self.data)
         }
         else {
             return nil
