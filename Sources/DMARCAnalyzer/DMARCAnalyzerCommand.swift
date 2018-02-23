@@ -16,7 +16,7 @@ struct DMARCAnalysisOptions {
     let approvedServers: [String]
 }
 
-public struct DMARCAnalyzerCommand: CommandHandler {
+public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
     public static let name = "analyze-dmarc"
     public static let shortDescription: String? = "Analyze passed in DMARC report emails"
     public static let longDescription: String? = nil
@@ -29,8 +29,7 @@ public struct DMARCAnalyzerCommand: CommandHandler {
 
         let optionsUrl = URL(fileURLWithPath: optionsPath.parsedValue)
         guard let optionsFile = FileSystem.default.path(from: optionsUrl).file else {
-            print("options file not found exist")
-            return
+            throw DMARCAnalyzerCommand.error("analyzing", because: "options file not found exist")
         }
         let decoder = JSONDecoder()
         let options = try decoder.decode(DMARCAnalysisOptions.self, from:  try optionsFile.contents())
@@ -39,8 +38,7 @@ public struct DMARCAnalyzerCommand: CommandHandler {
         if let filePath = path.parsedValue {
             let fileUrl = URL(fileURLWithPath: filePath)
             guard let file = FileSystem.default.path(from: fileUrl).file else {
-                print("email file does not exist")
-                return
+                throw DMARCAnalyzerCommand.error("analyzing", because: "email file does not exist")
             }
             message = try Message(path: file)
         }
@@ -56,16 +54,13 @@ public struct DMARCAnalyzerCommand: CommandHandler {
             }
 
             guard let contents = String(data: data, encoding: .ascii) else {
-                print("error converting input to a string")
-                return
+                throw DMARCAnalyzerCommand.error("analyzing", because: "error converting input to a string")
             }
-            print("'\(contents)'")
             message = try Message(contents: contents)
         }
 
-        guard let xmlData = message.attachments.flatMap({$0.xmlData}).first else {
-            print("No xml file found")
-            return
+        guard let xmlData = try message.attachments.flatMap({try $0.xmlData()}).first else {
+            throw DMARCAnalyzerCommand.error("analyzing", because: "no xml file found")
         }
 
         let xml = try XML(data: xmlData)
@@ -165,20 +160,18 @@ fileprivate extension XML {
 }
 
 private extension Message.Attachment {
-    var xmlData: Data? {
+    func xmlData() throws -> Data? {
         if self.name.hasSuffix(".zip") {
             guard let xmlEntry = (try? ZipContainer.open(container: self.data).first(where: {$0.info.name.hasSuffix(".xml")})) ?? nil else {
-                print("No xml found in zip")
-                return nil
+                throw DMARCAnalyzerCommand.error("analyzing", because: "no xml found in zip")
             }
             guard let xmlData = xmlEntry.data else {
-                print("Problem unzipping xml")
-                return nil
+                throw DMARCAnalyzerCommand.error("analyzing", because: "problem unzipping xml")
             }
             return xmlData
         }
         else if self.name.hasSuffix(".gz") {
-            return try? GzipArchive.unarchive(archive: self.data)
+            return try GzipArchive.unarchive(archive: self.data)
         }
         else {
             return nil

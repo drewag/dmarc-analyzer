@@ -54,7 +54,6 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
             throw Message.error("processing", because: "The contents could not be loaded from \(path)")
         }
 
-        print("'\(contents)'")
         try self.init(contents: contents)
     }
 
@@ -138,9 +137,6 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
             throw Message.error("processing", because: "An invalid 'date' was found from \(headers["date"] ?? "NONE").")
         }
 
-        if messageId == "<0B539EC5-C9B3-4033-B3E9-D617287E581F@i.softbank.jp>" {
-            print("here")
-        }
         if let rawReferences = headers["references"] {
             self.references = rawReferences.components(separatedBy: " ").filter({!$0.isEmpty})
         }
@@ -160,16 +156,6 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
         self.returnPath = headers["return-path"]
 
         self.headers = headers
-
-        //        print(self.references)
-        //        print("Attachments: \(attachments.map({"\($0.name) \($0.data.count)"}).joined(separator: ", "))")
-        //        print("BODY: \(messageId)")
-        //        switch self.content {
-        //        case .html(let html):
-        //            print(html)
-        //        case .plain(let plain):
-        //            print(plain)
-        //        }
     }
 }
 
