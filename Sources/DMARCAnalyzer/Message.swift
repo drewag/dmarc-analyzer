@@ -7,7 +7,6 @@
 
 import Foundation
 import Swiftlier
-import Foundation
 import SwiftServe
 
 struct Message: CustomStringConvertible, ErrorGenerating, Codable {
@@ -55,6 +54,10 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
             throw Message.error("processing", because: "The contents could not be loaded from \(path)")
         }
 
+        try self.init(contents: contents)
+    }
+
+    init(contents: String) throws {
         var headers = [String:String]()
         var fullLine = ""
 
@@ -75,7 +78,15 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
         var startedBody = false
         var body = ""
 
-        for line in contents.components(separatedBy: "\n") {
+        let newline: String
+        if contents.contains("\r\n") {
+            newline = "\r\n"
+        }
+        else {
+            newline = "\n"
+        }
+
+        for line in contents.components(separatedBy: newline) {
             guard !startedBody else {
                 body += "\n" + line
                 continue
@@ -105,16 +116,16 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
         processFullLine()
 
         guard let messageId = headers["message-id"] else {
-            throw Message.error("processing", because: "A 'message id' could not be found from \(headers["message-id"] ?? "NONE"). Path is \(path)")
+            throw Message.error("processing", because: "A 'message id' could not be found from \(headers["message-id"] ?? "NONE").")
         }
 
         guard let from = Person(headers["from"]) else {
-            throw Message.error("processing", because: "A 'from' could not be found from \(headers["from"] ?? "NONE"). Path is \(path)")
+            throw Message.error("processing", because: "A 'from' could not be found from \(headers["from"] ?? "NONE").")
         }
 
         if let toHeader = headers["to"] {
             guard let to = Person.people(from: toHeader) else {
-                throw Message.error("processing", because: "An invalid 'to' was found from \(toHeader). Path is \(path)")
+                throw Message.error("processing", because: "An invalid 'to' was found from \(toHeader).")
             }
             self.to = to
         }
@@ -123,7 +134,7 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
         }
 
         guard let date = Message.date(from: headers["date"]) else {
-            throw Message.error("processing", because: "An invalid 'date' was found from \(headers["date"] ?? "NONE"). Path is \(path)")
+            throw Message.error("processing", because: "An invalid 'date' was found from \(headers["date"] ?? "NONE").")
         }
 
         if messageId == "<0B539EC5-C9B3-4033-B3E9-D617287E581F@i.softbank.jp>" {
@@ -139,8 +150,7 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
         (self.content, self.attachments) = try Message.content(
             from: body,
             contentType: ContentType(headers["content-type"]),
-            transferEncoding: ContentTransferEncoding(headers["content-transfer-encoding"]),
-            path: path
+            transferEncoding: ContentTransferEncoding(headers["content-transfer-encoding"])
         )
 
         self.date = date
@@ -180,7 +190,7 @@ private extension Message {
     }
 
     static func date(from string: String?) -> Date? {
-        guard let string = string else {
+        guard let string = string?.trimmingWhitespaceOnEnds else {
             return nil
         }
 
@@ -192,7 +202,7 @@ private extension Message {
         return nil
     }
 
-    static func content(from body: String, contentType: ContentType, transferEncoding: ContentTransferEncoding, path: Path) throws -> (Content, [Attachment]) {
+    static func content(from body: String, contentType: ContentType, transferEncoding: ContentTransferEncoding) throws -> (Content, [Attachment]) {
         func processMultipartMixed(boundary: String) throws -> (Content, [Attachment]) {
             var attachments = [Attachment]()
             var plain: String?
@@ -221,11 +231,13 @@ private extension Message {
                     case .attachment(fileName: let fileName):
                         attachments.append(Attachment(name: fileName ?? "unknown.bin", data: part.parsedBody))
                     case .other(let string):
-                        throw self.error("processing", because: "An unknown octet stream disposition was found '\(string)'. Path is \(path)")
+                        throw self.error("processing", because: "An unknown octet stream disposition was found '\(string)'.")
                     }
+                case .zip(let name):
+                    attachments.append(Attachment(name: name ?? "unknown.zip", data: part.parsedBody))
                 case .multipartAlternative(boundary: let innerBoundary):
                     for part in MultiFormPart.parts(in: part.parsedBody, usingBoundary: innerBoundary) {
-                        let (content, _) = try self.content(from: part.contents ?? "", contentType: part.contentType ?? .none, transferEncoding: part.contentTransferEncoding, path: path)
+                        let (content, _) = try self.content(from: part.contents ?? "", contentType: part.contentType ?? .none, transferEncoding: part.contentTransferEncoding)
                         switch content {
                         case .html(let content):
                             html = content
@@ -244,7 +256,7 @@ private extension Message {
                 return (.html(html), attachments)
             }
             else {
-                throw self.error("processing", because: "A plain text nor an html version could be found. Path is \(path)")
+                throw self.error("processing", because: "A plain text nor an html version could be found.")
             }
         }
 
@@ -255,6 +267,10 @@ private extension Message {
             return (.plain(String(string: body, transferEncoding: transferEncoding, characterEncoding: encoding)), [])
         case .html(let encoding):
             return (.html(String(string: body, transferEncoding: transferEncoding, characterEncoding: encoding)), [])
+        case .zip(let name):
+            let base64Data = body.data(using: .ascii) ?? Data()
+            let body = Data(data: base64Data, transferEncoding: transferEncoding, characterEncoding: .ascii)
+            return (.plain(""), [Attachment(name: name ?? "unknown.zip", data: body)])
         case .multipartAlternative(boundary: let boundary):
             var html: String? = nil
             var plain: String? = nil
@@ -277,14 +293,14 @@ private extension Message {
                 return (.html(html), [])
             }
             else {
-                throw self.error("processing", because: "A plain text nor an html version could be found. Path is \(path)")
+                throw self.error("processing", because: "A plain text nor an html version could be found.")
             }
         case .multipartMixed(boundary: let boundary):
             return try processMultipartMixed(boundary: boundary)
         case .multipartRelated(boundary: let boundary):
             return try processMultipartMixed(boundary: boundary)
         default:
-            throw self.error("processing", because: "An invalid 'content type' was found \(contentType). Path is \(path)")
+            throw self.error("processing", because: "An invalid 'content type' was found \(contentType).")
         }
     }
 }
