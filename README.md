@@ -1,4 +1,6 @@
-# dmarc-analyzer
+# DMARC Analyzer
+
+This is my personal implementation of a parser for DMARC to alert me when a report comes back with problems. Feel free to adapt it to your needs if necessary.
 
 ## Setting Up Automatic Analysis with Postfix
 
