@@ -1,0 +1,8 @@
+{
+    "sourceEmail": "dmarc-analyzer@learnbrigade.com",
+    "problemEmail": "dmarc@learnbrigade.com",
+    "approvedServers": [
+        "45.33.0.104",
+        "2600:3c00::f03c:91ff:fe91:9176"
+    ]
+}

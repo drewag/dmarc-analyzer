@@ -46,11 +46,20 @@ public struct DMARCAnalyzerCommand: CommandHandler {
         }
         else {
             let handle = FileHandle.standardInput
-            let data = handle.availableData
+            var data = Data()
+            while true {
+                let read = handle.availableData
+                guard !read.isEmpty else {
+                    break
+                }
+                data.append(read)
+            }
+
             guard let contents = String(data: data, encoding: .ascii) else {
                 print("error converting input to a string")
                 return
             }
+            print("'\(contents)'")
             message = try Message(contents: contents)
         }
 

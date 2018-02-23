@@ -54,6 +54,7 @@ struct Message: CustomStringConvertible, ErrorGenerating, Codable {
             throw Message.error("processing", because: "The contents could not be loaded from \(path)")
         }
 
+        print("'\(contents)'")
         try self.init(contents: contents)
     }
 
