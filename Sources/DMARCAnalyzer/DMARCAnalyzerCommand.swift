@@ -9,6 +9,7 @@ import Foundation
 import Swiftlier
 import CommandLineParser
 import SWCompression
+import SwiftServe
 
 struct DMARCAnalysisOptions {
     let sourceEmail: EmailAddress
@@ -34,13 +35,13 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         let decoder = JSONDecoder()
         let options = try decoder.decode(DMARCAnalysisOptions.self, from:  try optionsFile.contents())
 
-        let message: Message
+        let emailParser: EmailParser
         if let filePath = path.parsedValue {
             let fileUrl = URL(fileURLWithPath: filePath)
             guard let file = FileSystem.default.path(from: fileUrl).file else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "email file does not exist")
             }
-            message = try Message(path: file)
+            emailParser = try EmailParser(path: file)
         }
         else {
             let handle = FileHandle.standardInput
@@ -56,10 +57,10 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
             guard let contents = String(data: data, encoding: .ascii) else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "error converting input to a string")
             }
-            message = try Message(contents: contents)
+            emailParser = try EmailParser(contents: contents)
         }
 
-        guard let xmlData = try message.attachments.flatMap({try $0.xmlData()}).first else {
+        guard let xmlData = try emailParser.attachments.flatMap({try $0.xmlData()}).first else {
             throw DMARCAnalyzerCommand.error("analyzing", because: "no xml file found")
         }
 
@@ -159,7 +160,7 @@ fileprivate extension XML {
     }
 }
 
-private extension Message.Attachment {
+private extension EmailParser.Attachment {
     func xmlData() throws -> Data? {
         if self.name.contains(".gz") {
             return try GzipArchive.unarchive(archive: self.data)
