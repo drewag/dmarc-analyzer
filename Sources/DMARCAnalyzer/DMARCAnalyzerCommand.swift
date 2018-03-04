@@ -36,13 +36,13 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         let decoder = JSONDecoder()
         let options = try decoder.decode(DMARCAnalysisOptions.self, from:  try optionsFile.contents())
 
-        let emailMessage: EmailMessage
+        let rawEmail: String
         if let filePath = path.parsedValue {
             let fileUrl = URL(fileURLWithPath: filePath)
             guard let file = FileSystem.default.path(from: fileUrl).file else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "email file does not exist")
             }
-            emailMessage = try EmailMessage(raw: try file.string() ?? "")
+            rawEmail = try file.string() ?? ""
         }
         else {
             let handle = FileHandle.standardInput
@@ -58,8 +58,10 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
             guard let contents = String(data: data, encoding: .ascii) else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "error converting input to a string")
             }
-            emailMessage = try EmailMessage(raw: contents)
+            rawEmail = contents
         }
+
+        let emailMessage = try EmailMessage(raw: rawEmail)
 
         guard let xmlData = try emailMessage.xmlData() else {
             throw DMARCAnalyzerCommand.error("analyzing", because: "no xml file found")
@@ -72,10 +74,12 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         var isAllGood = true
         let email = Email(
             to: options.problemEmail.string,
-            subject: "Problematic DMARC Report",
+            subject: "Problematic \(domain) DMARC Report",
             from: options.sourceEmail.string,
             build: { builder in
-                builder.append(html: "<h1>Problems from \(orgName):</h1><table>")
+                builder.appendAttachment(withContent: .email(raw: rawEmail), named: "original-report.eml")
+
+                builder.append(html: "<h1>Problems with \(domain) from \(orgName):</h1><table>")
                 builder.append(html: "<tr><th>IP Address</th><th>Is Approved Server</th><th>Problem</th></tr>")
 
                 for record in records {
@@ -126,7 +130,7 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
             email.send()
         }
         else {
-            Email(to: options.problemEmail.string, subject: "Passing DMARC Report", from: options.sourceEmail.string, plainBody: "All records passed from \(orgName)")
+            Email(to: options.problemEmail.string, subject: "Passing \(domain) DMARC Report", from: options.sourceEmail.string, plainBody: "All records passed from \(orgName)")
                 .send()
         }
     }
