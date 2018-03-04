@@ -15,6 +15,7 @@ struct DMARCAnalysisOptions {
     let sourceEmail: EmailAddress
     let problemEmail: EmailAddress
     let approvedServers: [String]
+    let domainSpecificServers: [String:[String]]?
 }
 
 public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
@@ -35,13 +36,13 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         let decoder = JSONDecoder()
         let options = try decoder.decode(DMARCAnalysisOptions.self, from:  try optionsFile.contents())
 
-        let emailParser: EmailParser
+        let emailMessage: EmailMessage
         if let filePath = path.parsedValue {
             let fileUrl = URL(fileURLWithPath: filePath)
             guard let file = FileSystem.default.path(from: fileUrl).file else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "email file does not exist")
             }
-            emailParser = try EmailParser(path: file)
+            emailMessage = try EmailMessage(raw: try file.string() ?? "")
         }
         else {
             let handle = FileHandle.standardInput
@@ -57,14 +58,15 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
             guard let contents = String(data: data, encoding: .ascii) else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "error converting input to a string")
             }
-            emailParser = try EmailParser(contents: contents)
+            emailMessage = try EmailMessage(raw: contents)
         }
 
-        guard let xmlData = try emailParser.attachments.flatMap({try $0.xmlData()}).first else {
+        guard let xmlData = try emailMessage.xmlData() else {
             throw DMARCAnalyzerCommand.error("analyzing", because: "no xml file found")
         }
 
         let xml = try XML(data: xmlData)
+        let domain = emailMessage.to?.first?.email.domain ?? ""
         let (orgName, records) = try xml.parseDMARC()
 
         var isAllGood = true
@@ -77,7 +79,7 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
                 builder.append(html: "<tr><th>IP Address</th><th>Is Approved Server</th><th>Problem</th></tr>")
 
                 for record in records {
-                    let isApproved = options.approvedServers.contains(record.sourceIP)
+                    let isApproved = options.approves(ip: record.sourceIP, forDomain: domain)
 
                     func appendRecord(withProblem problem: String) {
                         isAllGood = false
@@ -130,6 +132,79 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
     }
 }
 
+fileprivate extension DMARCAnalysisOptions {
+    func approves(ip: String, forDomain domain: String) -> Bool {
+        let approvedIps = self.approvedServers + (self.domainSpecificServers?[domain] ?? [])
+        for approved in approvedIps {
+            if self.ip(approved, matches: ip) {
+                return true
+            }
+        }
+        return false
+    }
+
+    enum IPVersion {
+        case v4(String, String, String, String)
+        case v6(String, String, String, String, String, String, String, String)
+        case unknown
+
+        init(_ ip: String) {
+            let dotComponents = ip.components(separatedBy: ".")
+            guard dotComponents.count != 4 else {
+                self = .v4(dotComponents[0], dotComponents[1], dotComponents[2], dotComponents[3])
+                return
+            }
+
+            let colonComponents = ip.components(separatedBy: ":")
+            guard colonComponents.count != 8 else {
+                self = .v6(colonComponents[0], colonComponents[1], colonComponents[2], colonComponents[3], colonComponents[4], colonComponents[5], colonComponents[6], colonComponents[7])
+                return
+            }
+            self = .unknown
+        }
+    }
+
+    func ip(_ lhs: String, matches rhs: String) -> Bool {
+        switch IPVersion(lhs) {
+        case .unknown:
+            return false
+        case let .v4(lOne, lTwo, lThree, lFour):
+            switch IPVersion(rhs) {
+            case let .v4(rOne, rTwo, rThree, rFour):
+                return self.components(
+                    [lOne, lTwo, lThree, lFour],
+                    match: [rOne, rTwo, rThree, rFour]
+                )
+            default:
+                return false
+            }
+        case let .v6(lOne, lTwo, lThree, lFour, lFive, lSix, lSeven, lEight):
+            switch IPVersion(rhs) {
+            case let .v6(rOne, rTwo, rThree, rFour, rFive, rSix, rSeven, rEight):
+                return self.components(
+                    [lOne, lTwo, lThree, lFour, lFive, lSix, lSeven, lEight],
+                    match: [rOne, rTwo, rThree, rFour, rFive, rSix, rSeven, rEight]
+                )
+            default:
+                return false
+            }
+        }
+    }
+
+    // Assumes two sides have same count
+    private func components(_ lhs: [String], match rhs: [String]) -> Bool {
+        for index in 0 ..< lhs.count {
+            if lhs[index].lowercased() == "x" || rhs[index].lowercased() == "x" {
+                return true
+            }
+            guard lhs[index].lowercased() == rhs[index].lowercased() else {
+                return false
+            }
+        }
+        return true
+    }
+}
+
 fileprivate extension XML {
     struct DMARCRecord {
         let sourceIP: String
@@ -156,25 +231,39 @@ fileprivate extension XML {
 
             output.append(DMARCRecord(sourceIP: sourceIP, passedDKIM: (dkim == "pass"), passedSPF: (spf == "pass")))
         }
+        if let row = feedback["record"]?.dictionary?["row"]
+            , let sourceIP = row["source_ip"]?.string
+            , let evaluated = row["policy_evaluated"]
+            , let dkim = evaluated["dkim"]?.string
+            , let spf = evaluated["spf"]?.string
+        {
+            output.append(DMARCRecord(sourceIP: sourceIP, passedDKIM: (dkim == "pass"), passedSPF: (spf == "pass")))
+        }
         return (orgName: feedback["report_metadata"]?["org_name"]?.string ?? "Unknown", records: output)
     }
 }
 
-private extension EmailParser.Attachment {
+private extension EmailMessage {
     func xmlData() throws -> Data? {
-        if self.name.contains(".gz") {
-            return try GzipArchive.unarchive(archive: self.data)
+        guard let part = self.part.part(ofType: .zip(name: nil))
+            ?? self.part.part(ofType: .gzip(name: nil))
+            else
+        {
+            return nil
         }
-        else if self.name.contains(".zip") {
-            guard let xmlEntry = (try? ZipContainer.open(container: self.data).first(where: {$0.info.name.hasSuffix(".xml")})) ?? nil else {
+
+        switch part.content {
+        case .gzip(let data):
+            return try GzipArchive.unarchive(archive: data)
+        case .zip(let data):
+            guard let xmlEntry = (try? ZipContainer.open(container: data).first(where: {$0.info.name.hasSuffix(".xml")})) ?? nil else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "no xml found in zip")
             }
             guard let xmlData = xmlEntry.data else {
                 throw DMARCAnalyzerCommand.error("analyzing", because: "problem unzipping xml")
             }
             return xmlData
-        }
-        else {
+        default:
             return nil
         }
     }
@@ -182,7 +271,7 @@ private extension EmailParser.Attachment {
 
 extension DMARCAnalysisOptions: Decodable {
     enum CodingKeys: String, CodingKey {
-        case sourceEmail, problemEmail, approvedServers
+        case sourceEmail, problemEmail, approvedServers, domainSpecificServers
     }
 
     init(from decoder: Decoder) throws {
@@ -191,5 +280,6 @@ extension DMARCAnalysisOptions: Decodable {
         self.sourceEmail = try EmailAddress(userString: container.decode(String.self, forKey: .sourceEmail), for: "analyzing")
         self.problemEmail = try EmailAddress(userString: container.decode(String.self, forKey: .problemEmail), for: "analyzing")
         self.approvedServers = try container.decode([String].self, forKey: .approvedServers)
+        self.domainSpecificServers = try container.decodeIfPresent([String:[String]].self, forKey: .domainSpecificServers)
     }
 }
