@@ -129,10 +129,6 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         if !isAllGood {
             email.send()
         }
-        else {
-            Email(to: options.problemEmail.string, subject: "Passing \(domain) DMARC Report", from: options.sourceEmail.string, plainBody: "All records passed from \(orgName)")
-                .send()
-        }
     }
 }
 
