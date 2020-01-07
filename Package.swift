@@ -1,30 +1,22 @@
-// swift-tools-version:4.0
-// The swift-tools-version declares the minimum version of Swift required to build this package.
+// swift-tools-version:5.0
 
 import PackageDescription
 
 let package = Package(
     name: "DMARCAnalyzer",
+    platforms: [.macOS(.v10_11)],
     products: [
-        .library(
-            name: "DMARCAnalyzer",
-            targets: ["DMARCAnalyzer"]),
-        .executable(
-            name: "analyze",
-            targets: ["analyze"])
+        .library(name: "DMARCAnalyzer", targets: ["DMARCAnalyzer"]),
+        .executable(name: "analyze", targets: ["analyze"])
     ],
     dependencies: [
-        .package(url: "https://github.com/drewag/Swiftlier.git", from: "4.0.0"),
-        .package(url: "https://github.com/drewag/command-line-parser.git", from: "2.0.0"),
-        .package(url: "https://github.com/drewag/swift-serve.git", from: "12.0.0"),
-        .package(url: "https://github.com/tsolomko/SWCompression.git", from: "4.0.0")
+        .package(url: "https://github.com/drewag/Swiftlier.git", from: "6.0.0"),
+        .package(url: "https://github.com/drewag/command-line-parser.git", from: "3.0.0"),
+        .package(url: "https://github.com/drewag/swift-serve.git", from: "18.0.0"),
+        .package(url: "https://github.com/tsolomko/SWCompression.git", from: "4.5.2"),
     ],
     targets: [
-        .target(
-            name: "DMARCAnalyzer",
-            dependencies: ["Swiftlier","CommandLineParser","SwiftServe", "SWCompression"]),
-        .target(
-            name: "analyze",
-            dependencies: ["DMARCAnalyzer"]),
+        .target(name: "DMARCAnalyzer", dependencies: ["Swiftlier","CommandLineParser","SwiftServe","SWCompression"]),
+        .target(name: "analyze", dependencies: ["DMARCAnalyzer"]),
     ]
 )

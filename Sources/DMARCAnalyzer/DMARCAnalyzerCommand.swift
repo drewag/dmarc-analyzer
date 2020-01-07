@@ -7,9 +7,9 @@
 
 import Foundation
 import Swiftlier
-import CommandLineParser
-import SWCompression
 import SwiftServe
+import SWCompression
+import CommandLineParser
 
 struct DMARCAnalysisOptions {
     let sourceEmail: EmailAddress
@@ -18,7 +18,7 @@ struct DMARCAnalysisOptions {
     let domainSpecificServers: [String:[String]]?
 }
 
-public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
+public struct DMARCAnalyzerCommand: CommandHandler {
     public static let name = "analyze-dmarc"
     public static let shortDescription: String? = "Analyze passed in DMARC report emails"
     public static let longDescription: String? = nil
@@ -31,7 +31,7 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
 
         let optionsUrl = URL(fileURLWithPath: optionsPath.parsedValue)
         guard let optionsFile = FileSystem.default.path(from: optionsUrl).file else {
-            throw DMARCAnalyzerCommand.error("analyzing", because: "options file not found exist")
+            throw GenericSwiftlierError("analyzing", because: "options file not found exist")
         }
         let decoder = JSONDecoder()
         let options = try decoder.decode(DMARCAnalysisOptions.self, from:  try optionsFile.contents())
@@ -40,7 +40,7 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         if let filePath = path.parsedValue {
             let fileUrl = URL(fileURLWithPath: filePath)
             guard let file = FileSystem.default.path(from: fileUrl).file else {
-                throw DMARCAnalyzerCommand.error("analyzing", because: "email file does not exist")
+                throw GenericSwiftlierError("analyzing", because: "email file does not exist")
             }
             rawEmail = try file.string() ?? ""
         }
@@ -56,7 +56,7 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
             }
 
             guard let contents = String(data: data, encoding: .ascii) else {
-                throw DMARCAnalyzerCommand.error("analyzing", because: "error converting input to a string")
+                throw GenericSwiftlierError("analyzing", because: "error converting input to a string")
             }
             rawEmail = contents
         }
@@ -64,10 +64,10 @@ public struct DMARCAnalyzerCommand: CommandHandler, ErrorGenerating {
         let emailMessage = try EmailMessage(raw: rawEmail)
 
         guard let xmlData = try emailMessage.xmlData() else {
-            throw DMARCAnalyzerCommand.error("analyzing", because: "no xml file found")
+            throw GenericSwiftlierError("analyzing", because: "no xml file found")
         }
 
-        let xml = try XML(data: xmlData)
+        let xml = try XML(xmlData)
         let domain = emailMessage.to?.first?.email.domain ?? ""
         let (orgName, records) = try xml.parseDMARC()
 
@@ -214,7 +214,7 @@ fileprivate extension XML {
 
     func parseDMARC() throws -> (orgName: String, records: [DMARCRecord]) {
         guard let feedback = self["feedback"] else {
-            throw self.error("parsing DMARC", because: "no feedback element was found in the xml")
+            throw GenericSwiftlierError("parsing DMARC", because: "no feedback element was found in the xml")
         }
 
         var output = [DMARCRecord]()
@@ -257,10 +257,10 @@ private extension EmailMessage {
             return try GzipArchive.unarchive(archive: data)
         case .zip(let data):
             guard let xmlEntry = (try? ZipContainer.open(container: data).first(where: {$0.info.name.hasSuffix(".xml")})) ?? nil else {
-                throw DMARCAnalyzerCommand.error("analyzing", because: "no xml found in zip")
+                throw GenericSwiftlierError("analyzing", because: "no xml found in zip")
             }
             guard let xmlData = xmlEntry.data else {
-                throw DMARCAnalyzerCommand.error("analyzing", because: "problem unzipping xml")
+                throw GenericSwiftlierError("analyzing", because: "problem unzipping xml")
             }
             return xmlData
         default:
