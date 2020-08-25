@@ -2,6 +2,5 @@
 /.build
 /Packages
 *.swp
-Package.resolved
 dmarc-options.json
 xcuserdata/

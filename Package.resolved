@@ -1,0 +1,43 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "BitByteData",
+        "repositoryURL": "https://github.com/tsolomko/BitByteData",
+        "state": {
+          "branch": null,
+          "revision": "3ee55b113ae52d5c1f4cbec0ed4eae613dcd7eff",
+          "version": "1.4.3"
+        }
+      },
+      {
+        "package": "CommandLineParser",
+        "repositoryURL": "https://github.com/drewag/command-line-parser.git",
+        "state": {
+          "branch": null,
+          "revision": "2233ad50b00c39f39327936570fa933169fcc3d1",
+          "version": "3.1.0"
+        }
+      },
+      {
+        "package": "SWCompression",
+        "repositoryURL": "https://github.com/tsolomko/SWCompression.git",
+        "state": {
+          "branch": null,
+          "revision": "f62eadc6b2201d239c5c2eeeb8144fcea8c9d40e",
+          "version": "4.5.5"
+        }
+      },
+      {
+        "package": "Swiftlier",
+        "repositoryURL": "https://github.com/drewag/Swiftlier.git",
+        "state": {
+          "branch": null,
+          "revision": "e1f78972b8a19cfff3248603d1a97f66ef9ef591",
+          "version": "6.1.3"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
