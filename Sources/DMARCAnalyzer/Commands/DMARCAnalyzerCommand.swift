@@ -7,15 +7,14 @@
 
 import Foundation
 import Swiftlier
-import SwiftServe
 import SWCompression
 import CommandLineParser
 
-struct DMARCAnalysisOptions {
+struct DMARCAnalysisOptions: Decodable {
     let sourceEmail: EmailAddress
     let problemEmail: EmailAddress
-    let approvedServers: [String]
-    let domainSpecificServers: [String:[String]]?
+    let approvedServers: [ServerSpec]
+    let domainSpecificServers: [String:[ServerSpec]]?
 }
 
 public struct DMARCAnalyzerCommand: CommandHandler {
@@ -136,72 +135,11 @@ fileprivate extension DMARCAnalysisOptions {
     func approves(ip: String, forDomain domain: String) -> Bool {
         let approvedIps = self.approvedServers + (self.domainSpecificServers?[domain] ?? [])
         for approved in approvedIps {
-            if self.ip(approved, matches: ip) {
+            if approved.matches(ip: ip) {
                 return true
             }
         }
         return false
-    }
-
-    enum IPVersion {
-        case v4(String, String, String, String)
-        case v6(String, String, String, String, String, String, String, String)
-        case unknown
-
-        init(_ ip: String) {
-            let dotComponents = ip.components(separatedBy: ".")
-            guard dotComponents.count != 4 else {
-                self = .v4(dotComponents[0], dotComponents[1], dotComponents[2], dotComponents[3])
-                return
-            }
-
-            let colonComponents = ip.components(separatedBy: ":")
-            guard colonComponents.count != 8 else {
-                self = .v6(colonComponents[0], colonComponents[1], colonComponents[2], colonComponents[3], colonComponents[4], colonComponents[5], colonComponents[6], colonComponents[7])
-                return
-            }
-            self = .unknown
-        }
-    }
-
-    func ip(_ lhs: String, matches rhs: String) -> Bool {
-        switch IPVersion(lhs) {
-        case .unknown:
-            return false
-        case let .v4(lOne, lTwo, lThree, lFour):
-            switch IPVersion(rhs) {
-            case let .v4(rOne, rTwo, rThree, rFour):
-                return self.components(
-                    [lOne, lTwo, lThree, lFour],
-                    match: [rOne, rTwo, rThree, rFour]
-                )
-            default:
-                return false
-            }
-        case let .v6(lOne, lTwo, lThree, lFour, lFive, lSix, lSeven, lEight):
-            switch IPVersion(rhs) {
-            case let .v6(rOne, rTwo, rThree, rFour, rFive, rSix, rSeven, rEight):
-                return self.components(
-                    [lOne, lTwo, lThree, lFour, lFive, lSix, lSeven, lEight],
-                    match: [rOne, rTwo, rThree, rFour, rFive, rSix, rSeven, rEight]
-                )
-            default:
-                return false
-            }
-        }
-    }
-
-    // Assumes two sides have same count
-    private func components(_ lhs: [String], match rhs: [String]) -> Bool {
-        for index in 0 ..< lhs.count {
-            if lhs[index].lowercased() == "x" || rhs[index].lowercased() == "x" {
-                return true
-            }
-            guard lhs[index].lowercased() == rhs[index].lowercased() else {
-                return false
-            }
-        }
-        return true
     }
 }
 
@@ -266,20 +204,5 @@ private extension EmailMessage {
         default:
             return nil
         }
-    }
-}
-
-extension DMARCAnalysisOptions: Decodable {
-    enum CodingKeys: String, CodingKey {
-        case sourceEmail, problemEmail, approvedServers, domainSpecificServers
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        self.sourceEmail = try EmailAddress(userString: container.decode(String.self, forKey: .sourceEmail), for: "analyzing")
-        self.problemEmail = try EmailAddress(userString: container.decode(String.self, forKey: .problemEmail), for: "analyzing")
-        self.approvedServers = try container.decode([String].self, forKey: .approvedServers)
-        self.domainSpecificServers = try container.decodeIfPresent([String:[String]].self, forKey: .domainSpecificServers)
     }
 }
