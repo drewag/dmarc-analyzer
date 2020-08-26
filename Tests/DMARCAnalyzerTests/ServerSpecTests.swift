@@ -18,14 +18,13 @@ class ServerSpecTests: XCTestCase {
         XCTAssertFalse(spec.matches(ip: "193.168.0.1"))
     }
 
-    func testMatchingIPV4WithSingleWildcard() {
-        let spec = ServerSpec(raw: "192.168.0.x")
-        XCTAssertTrue(spec.matches(ip: "192.168.0.1"))
-        XCTAssertTrue(spec.matches(ip: "192.168.0.0"))
-        XCTAssertTrue(spec.matches(ip: "192.168.0.212"))
-        XCTAssertFalse(spec.matches(ip: "192.168.1.1"))
-        XCTAssertFalse(spec.matches(ip: "192.169.0.1"))
-        XCTAssertFalse(spec.matches(ip: "193.168.0.1"))
+    func testMatchingIPV4Range() {
+        let spec = ServerSpec(raw: "192.168.1.0/24")
+        XCTAssertTrue(spec.matches(ip: "192.168.1.1"))
+        XCTAssertTrue(spec.matches(ip: "192.168.1.26"))
+        XCTAssertTrue(spec.matches(ip: "192.168.1.255"))
+        XCTAssertFalse(spec.matches(ip: "192.168.0.1"))
+        XCTAssertFalse(spec.matches(ip: "192.169.2.1"))
     }
 
     func testMatchingIPV6() {

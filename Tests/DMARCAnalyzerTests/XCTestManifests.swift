@@ -43,7 +43,7 @@ extension ServerSpecTests {
     // to regenerate.
     static let __allTests__ServerSpecTests = [
         ("testMatchingIPV4", testMatchingIPV4),
-        ("testMatchingIPV4WithSingleWildcard", testMatchingIPV4WithSingleWildcard),
+        ("testMatchingIPV4Range", testMatchingIPV4Range),
         ("testMatchingIPV6", testMatchingIPV6),
     ]
 }
